@@ -1,0 +1,87 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+library(tidyverse)
+library(gt)
+library(gtExtras)
+library(openintro)
+library(broom)
+library(mosaic)
+library(readxl)
+library(infer)
+library(stringr)
+library(readr)
+library(ggplot2)
+library(janitor)
+library(infer)
+library(dplyr)
+```
+
+Import Data.
+
+```{r import, echo=FALSE, warning=FALSE, message=FALSE}
+bills_18_20 <- read_excel("data/bills_2018-2020.xlsx", 
+    col_types = c("date", "text", "text", 
+        "text", "text", "text", "numeric"))
+bills_2021 <- read_csv("data/2021 Anti-Trans Bills _ Track Trans Legislation.csv")
+bills_2022 <- read_csv("data/2022 Anti-Trans Bills _ Track Trans Legislation.csv")
+bills_2023 <- read_csv("data/2023 Anti-Trans Bills _ Track Trans Legislation.csv")
+bills_2021$year <- format(bills_2021$Date, "%Y")
+bills_2022$year <- format(bills_2022$Date, "%Y")
+bills_2023$year <- format(bills_2023$Date, "%Y")
+bills_18_20$year <- format(bills_18_20$Date, "%Y")
+bills_21_23 <- rbind(bills_2021, bills_2022, bills_2023)
+bills_21_23$State <- setNames(state.abb, state.name)[bills_21_23$State]
+bills_18_23 <- rbind(bills_18_20, bills_21_23)
+glimpse(bills_18_23$State)
+bills_18_23 <- bills_18_23[!duplicated(bills_18_23), ]
+summary(bills_18_23)
+bills_18_23$Status[bills_18_23$Status == "Introduced*"] <- "Dead/Failed"
+bills_18_23$Status[bills_18_23$Status == "Posted"] <- "Dead/Failed"
+glimpse(bills_18_23)
+bills_18_23 <- bills_18_23 %>% mutate(Status = str_squish(Status))
+bills_18_23$Status[bills_18_23$Status == "Dead/Failed "] <- "Dead/Failed"
+bills_18_23$Status[bills_18_23$Status == "Dead/Failed  "] <- "Dead/Failed"
+bills_2018 <- filter(bills_18_23, year == "2018")
+bills_2019 <- filter(bills_18_23, year == "2019")
+bills_2020 <- filter(bills_18_23, year == "2020")
+bills_18_23 <- bills_18_23[(bills_18_23$year >= 2018), ]
+bills_18_23 <- bills_18_23[!is.na(bills_18_23$year), ]
+```
+
+
+Removal of unnecessary content：
+
+```{r text}
+#install.packages("tidytext")
+#install.packages('stopwords')
+#install.packages('SnowballC')
+
+library(stopwords)
+library(SnowballC)
+library(tidytext)
+descrip_raw <- bills_18_23 |> 
+  mutate(text = `Bill Description`) |> 
+  distinct(text, .keep_all = TRUE)
+
+stopwords_vec <- stopwords(language = "en")
+
+descrip_clean <- descrip_raw |> 
+  unnest_tokens(output = token, input = text) |> 
+  anti_join(get_stopwords(), by = c("token" = "word")) |> 
+  filter(!str_detect(token, "[:digit:]")) |> 
+  mutate(token = wordStem(token, language = "en")) |> 
+  group_by(token) |> 
+  filter(n() > 100)
+```
+
+
+
+```{r removal}
+#install.packages('wordcloud')
+library(wordcloud)
+library(reshape2)
+descrip_clean %>%
+  count(token, year) %>%
+  acast(token ~ year, value.var = "n", fill = 0) %>%
+  comparison.cloud(max.words = 200, title.size = 1)
+```
